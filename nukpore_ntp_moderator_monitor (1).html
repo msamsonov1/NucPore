@@ -1,0 +1,1687 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NukPore | NTP Core Moderator In-Pile State Monitor</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            space: {
+              950: '#03050a',
+              900: '#05070d',
+              850: '#080c14',
+              800: '#0e1424',
+              700: '#1b253b',
+              600: '#2b3959'
+            },
+            cyanAccent: '#06b6d4',
+            amberGlow: '#f59e0b',
+            hazardRed: '#ef4444',
+            coreViolet: '#8b5cf6',
+            safeGreen: '#10b981'
+          },
+          fontFamily: {
+            mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- MathJax v3 Pre-configuration and CDN -->
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    body {
+      background-color: #03050a;
+      font-family: 'Inter', sans-serif;
+      color: #e2e8f0;
+      overflow-x: hidden;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .formula-box {
+      font-family: 'Inter', serif;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #05070d;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+    .glow-cyan {
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.25);
+    }
+    .glow-red {
+      box-shadow: 0 0 18px rgba(239, 68, 68, 0.4);
+    }
+    .scanline {
+      background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.03), rgba(0, 255, 0, 0.01), rgba(0, 0, 255, 0.03));
+      background-size: 100% 2px, 3px 100%;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#03050a] text-slate-200">
+
+  <!-- TOP HEADER / HUD BAR -->
+  <header class="border-b border-gray-800 bg-space-900/90 backdrop-blur sticky top-0 z-50 px-4 lg:px-8 py-3">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 rounded-xl bg-gradient-to-tr from-cyan-600/30 to-violet-600/20 border border-cyan-500/40 text-cyan-400">
+          <i data-lucide="atom" class="w-6 h-6 animate-pulse"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="text-xl font-bold tracking-tight text-white flex items-center">
+              Nuk<span class="text-cyan-400">Pore</span>
+            </span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-mono bg-cyan-950/80 border border-cyan-800 text-cyan-300">
+              NASA SBIR T12.04: NTP
+            </span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-mono bg-violet-950/60 border border-violet-800 text-violet-300">
+              STTR TR-30% UCF
+            </span>
+          </div>
+          <p class="text-xs text-gray-400 font-mono">In-Pile ZrH<sub>x</sub> Moderator Desorption & Graphite Matrix Inductive Observer</p>
+        </div>
+      </div>
+
+      <!-- Quick Telemetry Chips -->
+      <div class="flex items-center gap-3 font-mono text-xs">
+        <div class="hidden sm:flex flex-col bg-space-850 px-3 py-1.5 rounded-lg border border-gray-800">
+          <span class="text-gray-500 text-[10px] uppercase">Core Fuel Element</span>
+          <span class="text-cyan-400 font-semibold flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span> NERVA / DRACO Gen-II
+          </span>
+        </div>
+        <div class="flex flex-col bg-space-850 px-3 py-1.5 rounded-lg border border-gray-800">
+          <span class="text-gray-500 text-[10px] uppercase">Core Status</span>
+          <span id="headerCoreStatusBadge" class="text-emerald-400 font-semibold flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> NOMINAL RETENTION
+          </span>
+        </div>
+        <div class="flex flex-col bg-space-850 px-3 py-1.5 rounded-lg border border-gray-800">
+          <span class="text-gray-500 text-[10px] uppercase">Reactivity Offset</span>
+          <span id="headerDeltaRho" class="text-amber-400 font-semibold">0.00 $</span>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center p-1 bg-space-950/80 rounded-xl border border-gray-800 text-xs font-medium">
+        <button id="tabBtnSim" onclick="switchTab('sim')" class="px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition text-cyan-400 bg-cyan-950/50 border border-cyan-800/80 shadow">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+          <span>Live Sim & Telemetry</span>
+        </button>
+        <button id="tabBtnPhysics" onclick="switchTab('physics')" class="px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition text-gray-400 hover:text-gray-200">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          <span>Core Physics Model</span>
+        </button>
+        <button id="tabBtnProposal" onclick="switchTab('proposal')" class="px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition text-gray-400 hover:text-gray-200">
+          <i data-lucide="file-badge-2" class="w-4 h-4"></i>
+          <span>$225k NASA SBIR</span>
+        </button>
+        <button id="tabBtnARR" onclick="switchTab('arr')" class="px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition text-gray-400 hover:text-gray-200">
+          <i data-lucide="trending-up" class="w-4 h-4"></i>
+          <span>Commercial ARR ($218M)</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto w-full p-4 lg:p-6 flex-1 flex flex-col space-y-6">
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 1: LIVE SIMULATION & TELEMETRY HUD -->
+    <!-- ========================================================================= -->
+    <section id="viewSim" class="flex flex-col space-y-6">
+
+      <!-- Upper Row: Physical NTP Core Element Canvas + (T, L) Phase Space Tracker -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Core Lattice Cross-Section Hardware & Eddy Current Loops (7 cols) -->
+        <div class="lg:col-span-7 bg-space-900/60 border border-gray-800/90 rounded-2xl p-4 flex flex-col relative overflow-hidden backdrop-blur">
+          <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+            <div class="flex items-center gap-2">
+              <i data-lucide="cpu" class="w-5 h-5 text-cyan-400"></i>
+              <h2 class="text-sm font-semibold tracking-wide text-white uppercase font-mono">In-Pile Moderator Lattice Cross-Section</h2>
+            </div>
+            <div class="flex items-center gap-2 text-xs font-mono">
+              <span class="inline-flex items-center px-2 py-0.5 rounded bg-gray-800/80 text-gray-300 border border-gray-700">
+                HF Eddy Coil $f = 125\text{ kHz}$
+              </span>
+              <span id="canvasHealthTag" class="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-400 font-semibold">
+                LATTICE INTACT
+              </span>
+            </div>
+          </div>
+
+          <!-- Canvas Hardware Display -->
+          <div class="relative w-full h-[320px] my-3 rounded-xl bg-space-950 border border-gray-900 overflow-hidden flex items-center justify-center">
+            <canvas id="coreCanvas" class="w-full h-full block"></canvas>
+            <div class="scanline absolute inset-0 pointer-events-none"></div>
+
+            <!-- Overlay Mini HUD Legend inside Canvas -->
+            <div class="absolute bottom-2 left-3 text-[11px] font-mono text-gray-400 bg-space-900/80 px-3 py-1.5 rounded-lg border border-gray-800/80 backdrop-blur pointer-events-none space-y-0.5">
+              <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-cyan-400 inline-block"></span> <span>ZrH<sub>x</sub> Moderator Rod Core</span></div>
+              <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block"></span> <span>Eddy-Current Non-Invasive Pickups ($L$)</span></div>
+              <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span> <span>Hydrogen Leakage Efflux / Porosity Wave</span></div>
+            </div>
+
+            <!-- Instant Core Status Indicator -->
+            <div id="simAlarmBanner" class="hidden absolute top-3 right-3 bg-rose-950/90 border border-rose-600 text-rose-200 px-3 py-1 rounded-lg text-xs font-mono font-bold flex items-center gap-2 animate-bounce">
+              <i data-lucide="alert-triangle" class="w-4 h-4 text-rose-400"></i>
+              <span>DESORPTION BREACH DETECTED</span>
+            </div>
+          </div>
+
+          <!-- Bottom Control Toggles under Canvas -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 font-mono text-xs">
+            <div class="bg-space-850 p-2.5 rounded-xl border border-gray-800/80">
+              <span class="text-gray-500 block text-[10px]">ZrH<sub>x</sub> Stoichiometry ($x$)</span>
+              <span id="stoichiometryVal" class="text-cyan-300 font-bold text-sm">ZrH<sub>1.88</sub></span>
+              <span class="text-[10px] text-gray-400 block">Baseline $1.92$</span>
+            </div>
+            <div class="bg-space-850 p-2.5 rounded-xl border border-gray-800/80">
+              <span class="text-gray-500 block text-[10px]">Matrix Porosity ($\phi$)</span>
+              <span id="porosityVal" class="text-amber-300 font-bold text-sm">0.82 %</span>
+              <span class="text-[10px] text-gray-400 block">Micro-cracks</span>
+            </div>
+            <div class="bg-space-850 p-2.5 rounded-xl border border-gray-800/80">
+              <span class="text-gray-500 block text-[10px]">Inductance Deviation ($\Delta L$)</span>
+              <span id="deltaLVal" class="text-violet-300 font-bold text-sm">-0.04 %</span>
+              <span class="text-[10px] text-gray-400 block">Mutual flux shift</span>
+            </div>
+            <div class="bg-space-850 p-2.5 rounded-xl border border-gray-800/80">
+              <span class="text-gray-500 block text-[10px]">Moderator State</span>
+              <span id="modStateBadge" class="text-emerald-400 font-bold text-sm">$\delta$-phase Intact</span>
+              <span class="text-[10px] text-gray-400 block">No phase collapse</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Column: Phase-Space Tracker T vs L Chart (5 cols) -->
+        <div class="lg:col-span-5 bg-space-900/60 border border-gray-800/90 rounded-2xl p-4 flex flex-col relative overflow-hidden backdrop-blur">
+          <div class="flex items-center justify-between pb-3 border-b border-gray-800">
+            <div class="flex items-center gap-2">
+              <i data-lucide="crosshair" class="w-5 h-5 text-violet-400"></i>
+              <h2 class="text-sm font-semibold tracking-wide text-white uppercase font-mono">Phase-Space State: $T$ vs. $L$</h2>
+            </div>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-950 text-violet-300 border border-violet-800">
+              Reactivity Observer
+            </span>
+          </div>
+
+          <div class="relative w-full h-[280px] my-3">
+            <canvas id="phaseSpaceChart"></canvas>
+          </div>
+
+          <div class="p-3 bg-space-950 rounded-xl border border-gray-800 text-xs font-mono space-y-1">
+            <div class="flex justify-between text-gray-400">
+              <span>Operating Point:</span>
+              <span id="phaseCoordTxt" class="text-cyan-300 font-semibold">$T = 1050\text{ K},\; L = 24.80\,\mu\text{H}$</span>
+            </div>
+            <div class="flex justify-between text-gray-400">
+              <span>Hazard Margin ($L - L_{\text{crit}}$):</span>
+              <span id="hazardMarginTxt" class="text-emerald-400 font-semibold">+1.92 $\mu$H Safe</span>
+            </div>
+            <div class="text-[11px] text-gray-500 pt-1 border-t border-gray-850">
+              $\Delta L < -1.1\,\mu\text{H}$ indicates ZrH lattice degassing into H<sub>2</sub> propellant channels, depleting thermal neutron cross-section.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lower Controls and Dynamic Telemetry Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Control & Anomaly Injection Console (4 cols) -->
+        <div class="lg:col-span-4 bg-space-900/60 border border-gray-800/90 rounded-2xl p-5 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-white font-mono flex items-center gap-2">
+                <i data-lucide="sliders" class="w-4 h-4 text-cyan-400"></i> In-Pile Core Controls
+              </h3>
+              <span class="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800">
+                Closed-Loop Active
+              </span>
+            </div>
+
+            <!-- Slider 1: Core Temperature T -->
+            <div class="space-y-1.5 mb-4">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-gray-400">Moderator Rod Temp ($T$)</span>
+                <span id="sliderTempDisplay" class="text-cyan-400 font-bold">1050 K</span>
+              </div>
+              <input id="sliderTemp" type="range" min="600" max="1500" value="1050" step="5"
+                     class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-cyan-400">
+              <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                <span>600 K (Idle)</span>
+                <span>1100 K (Rated)</span>
+                <span>1500 K (Meltdown Risk)</span>
+              </div>
+            </div>
+
+            <!-- Slider 2: H2 Propellant Chamber Pressure -->
+            <div class="space-y-1.5 mb-4">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-gray-400">Propellant Core Pressure ($P_{\text{H2}}$)</span>
+                <span id="sliderPressDisplay" class="text-violet-400 font-bold">4.20 MPa</span>
+              </div>
+              <input id="sliderPress" type="range" min="1.0" max="7.5" value="4.20" step="0.05"
+                     class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-violet-400">
+              <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                <span>1.0 MPa (Low Exp.)</span>
+                <span>4.2 MPa (Steady)</span>
+                <span>7.5 MPa (Chamber Max)</span>
+              </div>
+            </div>
+
+            <!-- Slider 3: Reactor Fission Power -->
+            <div class="space-y-1.5 mb-5">
+              <div class="flex justify-between text-xs font-mono">
+                <span class="text-gray-400">Thermal Power ($P_{\text{th}}$)</span>
+                <span id="sliderPowerDisplay" class="text-amber-400 font-bold">480 MWt</span>
+              </div>
+              <input id="sliderPower" type="range" min="50" max="950" value="480" step="10"
+                     class="w-full h-1.5 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-amber-400">
+              <div class="flex justify-between text-[10px] text-gray-500 font-mono">
+                <span>50 MWt</span>
+                <span>500 MWt</span>
+                <span>950 MWt</span>
+              </div>
+            </div>
+
+            <!-- Fault Injection and Auto-Mitigation Buttons -->
+            <div class="space-y-2 pt-2 border-t border-gray-800">
+              <span class="text-[11px] font-mono uppercase text-gray-400 font-semibold block mb-2">Simulate In-Pile Stress Scenarios:</span>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="injectFault('hydrogenLoss')" class="px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/80 rounded-xl text-rose-300 text-xs font-mono flex items-center justify-center gap-1.5 transition">
+                  <i data-lucide="flame" class="w-3.5 h-3.5"></i> Trigger H<sub>2</sub> Desorption
+                </button>
+                <button onclick="injectFault('graphiteCracking')" class="px-3 py-2 bg-amber-950/40 hover:bg-amber-900/60 border border-amber-800/80 rounded-xl text-amber-300 text-xs font-mono flex items-center justify-center gap-1.5 transition">
+                  <i data-lucide="zap-off" class="w-3.5 h-3.5"></i> Micro-crack Matrix
+                </button>
+              </div>
+              <button onclick="triggerAutonomousRecovery()" class="w-full py-2.5 mt-2 bg-gradient-to-r from-cyan-600/30 to-emerald-600/30 hover:from-cyan-600/50 hover:to-emerald-600/50 border border-cyan-500/60 rounded-xl text-cyan-200 text-xs font-mono font-semibold flex items-center justify-center gap-2 transition shadow">
+                <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i> Autonomous Observer Stabilization
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-4 p-3 bg-space-950/80 rounded-xl border border-gray-800 text-[11px] font-mono text-gray-400">
+            <span class="text-cyan-400 font-bold block mb-0.5">NukPore Observer Logic:</span>
+            When $(T, L)$ moves below the Sieverts equilibrium boundary, high-frequency coil mutual inductance indicates lattice density collapse prior to neutron flux peaking.
+          </div>
+        </div>
+
+        <!-- Real-Time Time-Series Charts (8 cols) -->
+        <div class="lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+          <!-- Time Chart 1: Inductance L & Hydrogen Retention vs Time -->
+          <div class="bg-space-900/60 border border-gray-800/90 rounded-2xl p-4 flex flex-col justify-between backdrop-blur">
+            <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+              <span class="text-xs font-bold font-mono text-white flex items-center gap-2">
+                <i data-lucide="line-chart" class="w-4 h-4 text-cyan-400"></i> Sensor Inductance $L(t)$ ($\mu$H)
+              </span>
+              <span class="text-[10px] font-mono text-cyan-400 bg-cyan-950 px-2 py-0.5 rounded border border-cyan-800">
+                125 kHz Pickups
+              </span>
+            </div>
+            <div class="relative w-full h-[220px] my-2">
+              <canvas id="timeSeriesChartL"></canvas>
+            </div>
+            <div class="text-[11px] font-mono text-gray-400 flex justify-between pt-1 border-t border-gray-850">
+              <span>Nominal: 24.8 $\mu\text{H}$</span>
+              <span id="currentLDisplay" class="text-cyan-300 font-semibold">24.78 $\mu\text{H}$</span>
+            </div>
+          </div>
+
+          <!-- Time Chart 2: Reactivity Worth & Delta Rho vs Time -->
+          <div class="bg-space-900/60 border border-gray-800/90 rounded-2xl p-4 flex flex-col justify-between backdrop-blur">
+            <div class="flex items-center justify-between pb-2 border-b border-gray-800">
+              <span class="text-xs font-bold font-mono text-white flex items-center gap-2">
+                <i data-lucide="gauge" class="w-4 h-4 text-amber-400"></i> Reactivity Penalty $\Delta \rho$ ($\$$)
+              </span>
+              <span class="text-[10px] font-mono text-amber-400 bg-amber-950 px-2 py-0.5 rounded border border-amber-800">
+                In-Pile Neutronics
+              </span>
+            </div>
+            <div class="relative w-full h-[220px] my-2">
+              <canvas id="timeSeriesChartRho"></canvas>
+            </div>
+            <div class="text-[11px] font-mono text-gray-400 flex justify-between pt-1 border-t border-gray-850">
+              <span>Critical Trip Limit: $-0.85\ \$$</span>
+              <span id="currentRhoDisplay" class="text-amber-300 font-semibold">-0.02 $</span>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 2: CORE PHYSICS & MATHEMATICAL MODEL -->
+    <!-- ========================================================================= -->
+    <section id="viewPhysics" class="hidden flex flex-col space-y-6">
+
+      <!-- Section Title Header -->
+      <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 backdrop-blur">
+        <div class="max-w-3xl">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono bg-cyan-950 border border-cyan-800 text-cyan-400 mb-3">
+            <i data-lucide="binary" class="w-3.5 h-3.5"></i> Multi-Physics Governing Principles
+          </div>
+          <h2 class="text-2xl font-bold text-white tracking-tight">Thermodynamic Desorption & Electromagnetic Eddy Sensing in NTP Cores</h2>
+          <p class="text-sm text-gray-400 mt-2 leading-relaxed">
+            NTP reactors operate hydrogen propellants at $T > 2500\text{ K}$, placing internal zirconium hydride ($\text{ZrH}_x$) moderator sleeves under immense thermal disassociation pressure. NukPore decodes the coupled physics between Sieverts-law hydrogen lattice desorption, graphite matrix micro-crack conductivity losses, and coil mutual inductance.
+          </p>
+        </div>
+      </div>
+
+      <!-- 4 Core Physics Formula Cards Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Card 1: Sieverts Law & Lattice Desorption Kinetics -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+              <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-cyan-950 border border-cyan-700 text-cyan-300 text-xs flex items-center justify-center font-mono">1</span>
+                ZrH<sub>x</sub> Sieverts Desorption Kinetics
+              </h3>
+              <span class="text-xs font-mono text-cyan-400">Thermodynamics</span>
+            </div>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              The equilibrium hydrogen dissociation pressure $P_{\text{H}_2}$ above delta-phase zirconium hydride ($\text{ZrH}_x$, where $1.6 \le x \le 2.0$) governs hydrogen loss across cladding micro-flaws as a direct exponential function of core temperature $T$:
+            </p>
+            <div class="formula-box bg-space-950 p-4 rounded-xl border border-gray-800 text-center text-cyan-300 text-sm overflow-x-auto my-3 shadow-inner">
+              $$\ln \left( \frac{P_{\text{H}_2}}{P_0} \right) = 2 \ln \left( \frac{x}{2 - x} \right) + \frac{\Delta H_{\text{des}}(x)}{R\, T} - \frac{\Delta S_{\text{des}}}{R}$$
+            </div>
+            <p class="text-xs text-gray-400 leading-relaxed">
+              When local temperatures exceed $1150\text{ K}$, hydrogen dissociates into atomic $\text{H}^0$, diffusing across the barrier coating into the supersonic propellant flow. This shifts the crystal matrix from FCC ($\delta$) to FCT ($\epsilon$), triggering a 4.2% macroscopic volumetric shrinkage.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex items-center justify-between text-xs font-mono text-gray-500">
+            <span>Enthalpy $\Delta H_{\text{des}} \approx -168\text{ kJ/mol}$</span>
+            <span>Ref: Vetrano & Edwards (1961)</span>
+          </div>
+        </div>
+
+        <!-- Card 2: High-Frequency Eddy Current & Mutual Inductance -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+              <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-violet-950 border border-violet-700 text-violet-300 text-xs flex items-center justify-center font-mono">2</span>
+                In-Pile Mutual Inductance Field Mapping
+              </h3>
+              <span class="text-xs font-mono text-violet-400">Maxwell Equations</span>
+            </div>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              Non-invasive high-temperature eddy coils surrounding the graphite-moderator channels induce circulating secondary currents. The effective pickup loop inductance $L_{\text{eff}}(\omega)$ depends directly on geometry, skin depth $\delta_s$, and core permeability:
+            </p>
+            <div class="formula-box bg-space-950 p-4 rounded-xl border border-gray-800 text-center text-violet-300 text-sm overflow-x-auto my-3 shadow-inner">
+              $$L_{\text{eff}}(\omega) = L_0 \left[ 1 - \kappa^2 \cdot \text{Re} \left( \frac{J_1(k r_c)}{k r_c \, J_0(k r_c)} \right) \right], \quad k = \frac{1 + j}{\delta_s} = \sqrt{j \omega \mu_0 \sigma_m}$$
+            </div>
+            <p class="text-xs text-gray-400 leading-relaxed">
+              As hydrogen escapes and graphite matrix micro-cracks interrupt circumferential current paths, effective composite conductivity $\sigma_m$ collapses, driving an immediate measurable drop in the imaginary and real mutual coupling terms.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex items-center justify-between text-xs font-mono text-gray-500">
+            <span>Drive Frequency $f = 125\text{ kHz}$</span>
+            <span>Skin Depth $\delta_s \approx 2.4\text{ mm}$</span>
+          </div>
+        </div>
+
+        <!-- Card 3: Reactivity Worth & Neutron Spectrum Softening Loss -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+              <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-amber-950 border border-amber-700 text-amber-300 text-xs flex items-center justify-center font-mono">3</span>
+                Reactivity Penalty & Thermalization Deficit
+              </h3>
+              <span class="text-xs font-mono text-amber-400">Neutronics</span>
+            </div>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              The moderating ratio of $\text{ZrH}_x$ provides up to $68\%$ of thermal neutron flux necessary for low-enriched uranium (HALEU $19.75\%$ $^{235}\text{U}$) NTP criticality. Desorption induces a net negative reactivity worth $\Delta \rho_{\text{H}}$:
+            </p>
+            <div class="formula-box bg-space-950 p-4 rounded-xl border border-gray-800 text-center text-amber-300 text-sm overflow-x-auto my-3 shadow-inner">
+              $$\Delta \rho_{\text{mod}} = \frac{1}{\beta_{\text{eff}}} \int_{V_{\text{core}}} \left[ \nabla \phi^* \cdot \delta D \, \nabla \phi - \phi^* \, \delta \left( \xi \Sigma_s \right) \phi \right] dV \approx - \alpha_{\text{H}} \left( 1 - \frac{x(t)}{x_0} \right)$$
+            </div>
+            <p class="text-xs text-gray-400 leading-relaxed">
+              Loss of thermalization hardens the neutron spectrum, causing rapid core power peaking in adjacent fuel elements as control drums rotate outward to compensate, inducing catastrophic localized fuel melting if not preempted.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex items-center justify-between text-xs font-mono text-gray-500">
+            <span>Reactivity Coeff $\alpha_{\text{H}} \approx 3.42\ \$$</span>
+            <span>Safety Margin $\Delta \rho_{\text{crit}} = -0.85\ \$$</span>
+          </div>
+        </div>
+
+        <!-- Card 4: Extended Kalman State Observer & Inversion Filter -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+              <h3 class="text-base font-semibold text-white flex items-center gap-2">
+                <span class="w-6 h-6 rounded-lg bg-emerald-950 border border-emerald-700 text-emerald-300 text-xs flex items-center justify-center font-mono">4</span>
+                Real-Time In-Pile State Observer Formulation
+              </h3>
+              <span class="text-xs font-mono text-emerald-400">Inversion Algorithm</span>
+            </div>
+            <p class="text-xs text-gray-300 leading-relaxed">
+              NukPore executes an in-pile Extended Kalman Filter (EKF) combining thermocouple readouts with high-frequency complex mutual impedance $\mathbf{Z}_m = R + j\omega L$:
+            </p>
+            <div class="formula-box bg-space-950 p-4 rounded-xl border border-gray-800 text-center text-emerald-300 text-sm overflow-x-auto my-3 shadow-inner">
+              $$\hat{\mathbf{x}}_{k|k} = \hat{\mathbf{x}}_{k|k-1} + \mathbf{K}_k \left( \begin{bmatrix} T_k \\ L_k \end{bmatrix} - \mathbf{h}\left( \hat{x}_{\text{H}}, \hat{\phi}_{\text{crk}}, \hat{T} \right) \right)$$
+            </div>
+            <p class="text-xs text-gray-400 leading-relaxed">
+              The observer decouples thermal expansion from true hydrogen desorption: purely thermal shifts follow the reversible curve, while chemical desorption introduces an irreversible loop hysteresis $\oint L \, dT < 0$, isolating leaks within 40 ms.
+            </p>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex items-center justify-between text-xs font-mono text-gray-500">
+            <span>Update Rate $25\text{ Hz}$</span>
+            <span>Estimation Error $\sigma_x < 0.008$</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- New Section: Why Others Missed This (Diagnostic Blindspot Breakdown) -->
+      <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 backdrop-blur mt-6">
+        <div class="flex items-center gap-2 pb-3 border-b border-gray-800 mb-4">
+          <div class="p-2 rounded-xl bg-rose-950/60 border border-rose-800 text-rose-400">
+            <i data-lucide="eye-off" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white uppercase font-mono tracking-wide">Why Legacy Aerospace & Nuclear Programs Missed This</h3>
+            <p class="text-xs text-gray-400 font-mono">The 3 Structural Blindspots of Historic NERVA, Project Rover & Modern NTP Instrumentation</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5 text-xs">
+          <!-- Blindspot 1 -->
+          <div class="bg-space-950/80 p-4 rounded-xl border border-gray-800 flex flex-col justify-between">
+            <div>
+              <span class="text-[10px] font-mono text-rose-400 font-bold uppercase tracking-wider block mb-1">Blindspot 1: Sensor Physics</span>
+              <h4 class="text-white font-bold text-sm mb-2">The "Thermal Inertia" Trap</h4>
+              <p class="text-gray-400 leading-relaxed">
+                Legacy designs relied strictly on Type C/D tungsten-rhenium thermocouples or optical pyrometers. In high-flow ($>40\text{ kg/s}$) sonic hydrogen propellant, local convective cooling conceals internal hydride degassing. By the time a thermocouple registers a thermal spike, the moderator rod has already lost critical moderation, initiating an irreversible fuel element runaway.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-gray-850 text-gray-500 font-mono text-[10px]">
+              Thermocouple lag: $1.2\text{--}4.0\text{ s}$ vs. NukPore: $<40\text{ ms}$
+            </div>
+          </div>
+
+          <!-- Blindspot 2 -->
+          <div class="bg-space-950/80 p-4 rounded-xl border border-gray-800 flex flex-col justify-between">
+            <div>
+              <span class="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-wider block mb-1">Blindspot 2: Neutronics Illusion</span>
+              <h4 class="text-white font-bold text-sm mb-2">Ex-Core Flux Averaging</h4>
+              <p class="text-gray-400 leading-relaxed">
+                Conventional reactors use ex-core fission chambers situated outside the pressure vessel. These instruments measure <em>globally averaged</em> neutron leakage flux. A localized moderator pin leak across a 2-cm sector causes dramatic thermal neutron spectrum hardening and power tilting in neighboring fuel channels while the total core power meter remains deceptively unchanged.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-gray-850 text-gray-500 font-mono text-[10px]">
+              Ex-core resolution: $\varnothing > 50\text{ cm}$ vs. NukPore: Local pin-bundle resolution
+            </div>
+          </div>
+
+          <!-- Blindspot 3 -->
+          <div class="bg-space-950/80 p-4 rounded-xl border border-gray-800 flex flex-col justify-between">
+            <div>
+              <span class="text-[10px] font-mono text-cyan-400 font-bold uppercase tracking-wider block mb-1">Blindspot 3: Materials Modeling</span>
+              <h4 class="text-white font-bold text-sm mb-2">Conflating Thermal Strain with Desorption</h4>
+              <p class="text-gray-400 leading-relaxed">
+                Historic programs treated geometric core expansion as a purely monotonic function of temperature ($\alpha \Delta T$). They failed to realize that at $T > 1050\text{ K}$, Sieverts phase transitions ($\delta \to \epsilon/\alpha$) introduce an electromagnetic permeability and skin depth collapse that is <strong>irreversible and path-dependent</strong> ($\oint L\,dT \neq 0$). NukPore is the first observer to exploit this hysteresis.
+              </p>
+            </div>
+            <div class="mt-3 pt-2 border-t border-gray-850 text-gray-500 font-mono text-[10px]">
+              State Space: Pure scalar $T$ $\to$ Coupled $(T, L)$ Hysteresis Loop
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 3: $225,000 NASA SBIR/STTR PROPOSAL & HARDWARE TRANSITION -->
+    <!-- ========================================================================= -->
+    <section id="viewProposal" class="hidden flex flex-col space-y-6">
+
+      <!-- NASA Solicitation Alignment Card -->
+      <div class="bg-gradient-to-r from-space-900 via-space-850 to-space-900 border border-cyan-800/80 rounded-2xl p-6 relative overflow-hidden backdrop-blur">
+        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 pb-4 mb-4">
+          <div>
+            <span class="text-xs font-mono text-cyan-400 uppercase tracking-widest block mb-1">NASA SBIR/STTR FY2026 Phase I Solicitation</span>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Topic T12.04: Advanced In-Pile Instrumentation for Space Nuclear Propulsion</h2>
+          </div>
+          <div class="text-right font-mono">
+            <span class="text-2xl font-bold text-emerald-400">$225,000</span>
+            <span class="text-xs text-gray-400 block">6-Month Phase I Execution</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
+          <div class="bg-space-950/70 p-3.5 rounded-xl border border-gray-800">
+            <span class="text-gray-500 block mb-1">Research Institution Partner</span>
+            <span class="text-white font-bold text-sm">Univ. of Central Florida (UCF)</span>
+            <span class="text-cyan-400 block mt-1">CATER Combustion & Extreme Thermo Labs</span>
+          </div>
+          <div class="bg-space-950/70 p-3.5 rounded-xl border border-gray-800">
+            <span class="text-gray-500 block mb-1">STTR Subcontract Allocation</span>
+            <span class="text-amber-300 font-bold text-sm">30.0% ($67,500.00)</span>
+            <span class="text-gray-400 block mt-1">Exceeds 30% STTR Mandatory Floor</span>
+          </div>
+          <div class="bg-space-950/70 p-3.5 rounded-xl border border-gray-800">
+            <span class="text-gray-500 block mb-1">Target Mission Platforms</span>
+            <span class="text-violet-300 font-bold text-sm">DRACO & Crewed Mars NTP</span>
+            <span class="text-gray-400 block mt-1">HALEU Cermet / Graphite Core Designs</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 6-Month Work Breakdown Schedule -->
+      <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 backdrop-blur">
+        <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-6">
+          <div class="flex items-center gap-2">
+            <i data-lucide="calendar" class="w-5 h-5 text-cyan-400"></i>
+            <h3 class="text-base font-semibold text-white uppercase font-mono tracking-wider">Phase I Work Breakdown Schedule (Months 1–6)</h3>
+          </div>
+          <span class="text-xs font-mono text-gray-400">Total Milestones: 4 Gate Reviews</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <!-- Month 1-2 -->
+          <div class="bg-space-950/80 border border-gray-800/90 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-mono px-2 py-0.5 rounded bg-cyan-950 border border-cyan-800 text-cyan-400">Months 1–2</span>
+                <span class="text-xs font-mono text-gray-500">$55k</span>
+              </div>
+              <h4 class="text-sm font-bold text-white mb-2">M1: Coupled Multiphysics Lattice Modeling</h4>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                Formulate 3D finite-element Maxwell-Sieverts solver in COMSOL/OpenFOAM coupling $T$-dependent H<sub>2</sub> migration with eddy coil impedance curves for cylindrical ZrH<sub>1.9</sub> rods.
+              </p>
+            </div>
+            <div class="mt-4 pt-2 border-t border-gray-850 text-[10px] font-mono text-cyan-400">
+              Deliverable: High-Fidelity Lattice Baseline State Space
+            </div>
+          </div>
+
+          <!-- Month 3-4 -->
+          <div class="bg-space-950/80 border border-gray-800/90 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-mono px-2 py-0.5 rounded bg-violet-950 border border-violet-800 text-violet-400">Months 3–4</span>
+                <span class="text-xs font-mono text-gray-500">$60k</span>
+              </div>
+              <h4 class="text-sm font-bold text-white mb-2">M2: High-T Sensor Benchtop Prototyping (UCF)</h4>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                UCF CATER lab tests platinum/tantalum coil micro-windings up to $1400\text{ K}$ inside quartz vacuum chambers with controlled deuterium/hydrogen gas bleeding to calibrate $\Delta L$ sensitivity.
+              </p>
+            </div>
+            <div class="mt-4 pt-2 border-t border-gray-850 text-[10px] font-mono text-violet-400">
+              Deliverable: High-T Impedance Calibration Curves
+            </div>
+          </div>
+
+          <!-- Month 5 -->
+          <div class="bg-space-950/80 border border-gray-800/90 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-mono px-2 py-0.5 rounded bg-amber-950 border border-amber-800 text-amber-400">Month 5</span>
+                <span class="text-xs font-mono text-gray-500">$50k</span>
+              </div>
+              <h4 class="text-sm font-bold text-white mb-2">M3: Real-Time EKF Inversion Algorithm</h4>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                Implement radiation-hardened FPGA software package for deterministic $40\text{ ms}$ state recovery. Validates early leak warnings against NASA nuclear safety criteria.
+              </p>
+            </div>
+            <div class="mt-4 pt-2 border-t border-gray-850 text-[10px] font-mono text-amber-400">
+              Deliverable: Firmware Core & Autonomic Reactor Trim
+            </div>
+          </div>
+
+          <!-- Month 6 -->
+          <div class="bg-space-950/80 border border-gray-800/90 rounded-xl p-4 flex flex-col justify-between">
+            <div>
+              <div class="flex justify-between items-center mb-2">
+                <span class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-400">Month 6</span>
+                <span class="text-xs font-mono text-gray-500">$60k</span>
+              </div>
+              <h4 class="text-sm font-bold text-white mb-2">M4: Phase II In-Pile Test Plan & Spec</h4>
+              <p class="text-xs text-gray-400 leading-relaxed">
+                Final technical report, preliminary design review (PDR), and formal test matrix for Phase II insertion inside TREAT or MITR experimental neutron beamline facilities.
+              </p>
+            </div>
+            <div class="mt-4 pt-2 border-t border-gray-850 text-[10px] font-mono text-emerald-400">
+              Deliverable: Phase II $1.25M Scale-Up Proposal
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Phase II Hardware Transition Roadmap -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 backdrop-blur">
+          <div class="flex items-center gap-2 pb-3 border-b border-gray-800 mb-3">
+            <i data-lucide="layers" class="w-5 h-5 text-cyan-400"></i>
+            <h3 class="text-sm font-bold text-white uppercase font-mono">Phase II Prototyping Roadmap ($1.25M)</h3>
+          </div>
+          <ul class="space-y-3 text-xs text-gray-300">
+            <li class="flex items-start gap-2">
+              <i data-lucide="check-circle" class="w-4 h-4 text-cyan-400 mt-0.5 shrink-0"></i>
+              <span><strong>TREAT Nuclear Facility Test Insertion:</strong> Fabricate subscale 7-element hexagonal fuel-moderator bundle with embedded SiC/Pt eddy sensor arrays for transient neutron exposure.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i data-lucide="check-circle" class="w-4 h-4 text-cyan-400 mt-0.5 shrink-0"></i>
+              <span><strong>UCF Extreme Dynamic Arc-Jet:</strong> High-enthalpy hydrogen supersonic plasma sweeps evaluating structural coating durability and inductive baseline drift over 20+ thermal start-stop cycles.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <i data-lucide="check-circle" class="w-4 h-4 text-cyan-400 mt-0.5 shrink-0"></i>
+              <span><strong>TRL Maturation:</strong> Advance from TRL 3 (analytical proof of concept) to TRL 6 (flight-traceable engineering demonstration in relevant space nuclear operating environment).</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 backdrop-blur">
+          <div class="flex items-center gap-2 pb-3 border-b border-gray-800 mb-3">
+            <i data-lucide="award" class="w-5 h-5 text-amber-400"></i>
+            <h3 class="text-sm font-bold text-white uppercase font-mono">Subcontractor Role: UCF CATER Labs</h3>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed mb-3">
+            The Center for Advanced Turbomachinery and Energy Research (CATER) at UCF contributes specialized high-temperature diagnostic autoclaves capable of simultaneous $1500\text{ K}$, $8\text{ MPa}$ pure hydrogen gas atmospheres.
+          </p>
+          <div class="bg-space-950 p-3 rounded-xl border border-gray-800 text-xs font-mono space-y-1.5">
+            <div class="flex justify-between text-gray-400">
+              <span>Co-PI / Facility Lead:</span>
+              <span class="text-white">UCF High-Temperature Materials Group</span>
+            </div>
+            <div class="flex justify-between text-gray-400">
+              <span>Direct Subcontract Amount:</span>
+              <span class="text-amber-400 font-bold">$67,500 (30.0%)</span>
+            </div>
+            <div class="flex justify-between text-gray-400">
+              <span>Specialized Hardware:</span>
+              <span class="text-cyan-300">Ultra-High Vacuum Laser Spectrometer</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ========================================================================= -->
+    <!-- VIEW 4: COMMERCIAL & NATIONWIDE ARR BREAKDOWN ($218M) -->
+    <!-- ========================================================================= -->
+    <section id="viewARR" class="hidden flex flex-col space-y-6">
+
+      <!-- Executive Overview Banner -->
+      <div class="bg-gradient-to-r from-space-900 via-space-850 to-space-900 border border-cyan-800/80 rounded-2xl p-6 backdrop-blur">
+        <div class="flex flex-wrap items-center justify-between gap-4 border-b border-gray-800 pb-4 mb-4">
+          <div>
+            <span class="text-xs font-mono text-cyan-400 uppercase tracking-widest block mb-1">Civil & Commercial Market Modernization</span>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Total Addressable Market & Software ARR: $218.4M / Year</h2>
+          </div>
+          <div class="text-right font-mono">
+            <span class="text-xs text-gray-400 block">Enterprise Valuation (10x SaaS Multiple)</span>
+            <span class="text-2xl font-bold text-emerald-400">$2.18 Billion</span>
+          </div>
+        </div>
+        <p class="text-xs text-gray-300 leading-relaxed max-w-4xl">
+          Beyond NASA deep-space thermal propulsion, NukPore's core physical insight—measuring non-invasive mutual inductance shifts caused by microscopic hydrogen lattice desorption and micro-porosity formation—solves critical multi-billion-dollar unmonitored material embrittlement hazards across commercial energy, civil aerospace, clean hydrogen logistics, and advanced semiconductor manufacturing.
+        </p>
+      </div>
+
+      <!-- ARR Distribution Table -->
+      <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-6 backdrop-blur overflow-x-auto">
+        <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
+          <div class="flex items-center gap-2">
+            <i data-lucide="table" class="w-5 h-5 text-cyan-400"></i>
+            <h3 class="text-base font-semibold text-white uppercase font-mono tracking-wider">Civil & Commercial Sector ARR Projections</h3>
+          </div>
+          <span class="text-xs font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
+            5 Civil Verticals
+          </span>
+        </div>
+
+        <table class="w-full text-left font-mono text-xs text-gray-300 min-w-[640px]">
+          <thead>
+            <tr class="border-b border-gray-800 text-gray-400 bg-space-950/60">
+              <th class="py-3 px-3">Industry Vertical</th>
+              <th class="py-3 px-3">Specific Target Application</th>
+              <th class="py-3 px-3">SaaS / Telemetry Pricing</th>
+              <th class="py-3 px-3">Nationwide Asset Base</th>
+              <th class="py-3 px-3 text-right text-cyan-400">Mature ARR ($M)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-800/60">
+            <tr class="hover:bg-space-850/50 transition">
+              <td class="py-3 px-3 font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span> Commercial SMR & Microreactors
+              </td>
+              <td class="py-3 px-3 text-gray-300">Moderator rod life tracking & H<sub>2</sub> migration</td>
+              <td class="py-3 px-3">$85,000 / reactor core / yr</td>
+              <td class="py-3 px-3">420 Operational Units</td>
+              <td class="py-3 px-3 text-right font-bold text-emerald-400">$35.7M</td>
+            </tr>
+            <tr class="hover:bg-space-850/50 transition">
+              <td class="py-3 px-3 font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-violet-400"></span> Liquid H<sub>2</sub> Cryo-Infrastructure
+              </td>
+              <td class="py-3 px-3 text-gray-300">Transfer lines, storage tank embrittlement monitoring</td>
+              <td class="py-3 px-3">$14,500 / terminal loop / yr</td>
+              <td class="py-3 px-3">3,200 High-Pressure Nodes</td>
+              <td class="py-3 px-3 text-right font-bold text-emerald-400">$46.4M</td>
+            </tr>
+            <tr class="hover:bg-space-850/50 transition">
+              <td class="py-3 px-3 font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span> Commercial Civil Aviation Turbines
+              </td>
+              <td class="py-3 px-3 text-gray-300">H<sub>2</sub> combustion turbine liner & thermal barrier cracks</td>
+              <td class="py-3 px-3">$4,800 / engine core / yr</td>
+              <td class="py-3 px-3">14,500 Turbofan Engines</td>
+              <td class="py-3 px-3 text-right font-bold text-emerald-400">$69.6M</td>
+            </tr>
+            <tr class="hover:bg-space-850/50 transition">
+              <td class="py-3 px-3 font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-rose-400"></span> Heavy Industrial Ammonia & Steel
+              </td>
+              <td class="py-3 px-3 text-gray-300">Direct Reduced Iron (DRI) high-temperature reformer tubes</td>
+              <td class="py-3 px-3">$32,000 / plant furnace / yr</td>
+              <td class="py-3 px-3">1,150 Global Furnace Stacks</td>
+              <td class="py-3 px-3 text-right font-bold text-emerald-400">$36.8M</td>
+            </tr>
+            <tr class="hover:bg-space-850/50 transition">
+              <td class="py-3 px-3 font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Semiconductor EUV Lithography
+              </td>
+              <td class="py-3 px-3 text-gray-300">Tin droplet generator hydrogen debris mitigation coils</td>
+              <td class="py-3 px-3">$62,000 / EUV scanner / yr</td>
+              <td class="py-3 px-3">480 Global Lithography Tools</td>
+              <td class="py-3 px-3 text-right font-bold text-emerald-400">$29.9M</td>
+            </tr>
+            <tr class="bg-space-950 font-bold border-t-2 border-cyan-800 text-white">
+              <td class="py-3 px-3" colspan="4">Total Civil & Commercial Software ARR (Nationwide Mature Base)</td>
+              <td class="py-3 px-3 text-right text-emerald-400 text-sm">$218.4M / yr</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Detailed Industry Deep-Dive Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+        <!-- Deep Dive 1: Commercial SMRs -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="p-1.5 rounded-lg bg-cyan-950 border border-cyan-800 text-cyan-400">
+                <i data-lucide="shield" class="w-4 h-4"></i>
+              </div>
+              <h4 class="text-sm font-bold text-white">1. Commercial SMR & Microreactors</h4>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div>
+                <span class="font-mono text-cyan-400 block text-[10px] uppercase font-semibold">Physics in 1 Sentence:</span>
+                <p class="text-gray-300">Small modular reactors using solid hydride moderation leak hydrogen over multi-year duty cycles, slowly dropping control margins without external indication.</p>
+              </div>
+              <div>
+                <span class="font-mono text-gray-500 block text-[10px] uppercase font-semibold">Why Others Missed This (Plain English):</span>
+                <p class="text-gray-400">Incumbents rely on external ex-core neutron detectors which only observe overall core drop after moderator sleeves have already degraded by >15%, requiring unplanned $40M refueling shutdowns.</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex justify-between font-mono text-[11px]">
+            <span class="text-gray-500">ARR Yield</span>
+            <span class="text-cyan-300 font-bold">$35.7M / yr</span>
+          </div>
+        </div>
+
+        <!-- Deep Dive 2: Clean H2 Infrastructure -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="p-1.5 rounded-lg bg-violet-950 border border-violet-800 text-violet-400">
+                <i data-lucide="git-commit" class="w-4 h-4"></i>
+              </div>
+              <h4 class="text-sm font-bold text-white">2. Liquid H<sub>2</sub> Cryo-Infrastructure</h4>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div>
+                <span class="font-mono text-violet-400 block text-[10px] uppercase font-semibold">Physics in 1 Sentence:</span>
+                <p class="text-gray-300">Atomic hydrogen ingress into pipeline austenitic steels generates microscopic crystal lattice dilation, lowering high-frequency electromagnetic skin depth.</p>
+              </div>
+              <div>
+                <span class="font-mono text-gray-500 block text-[10px] uppercase font-semibold">Why Others Missed This (Plain English):</span>
+                <p class="text-gray-400">Pipeline operators use periodic acoustic pigging that only spots macro-cracks after structural breach has started, whereas inductive monitoring catches the earliest sub-surface embrittlement wave.</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex justify-between font-mono text-[11px]">
+            <span class="text-gray-500">ARR Yield</span>
+            <span class="text-violet-300 font-bold">$46.4M / yr</span>
+          </div>
+        </div>
+
+        <!-- Deep Dive 3: Commercial Civil Aviation -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="p-1.5 rounded-lg bg-amber-950 border border-amber-800 text-amber-400">
+                <i data-lucide="plane" class="w-4 h-4"></i>
+              </div>
+              <h4 class="text-sm font-bold text-white">3. Commercial Civil Aviation Turbines</h4>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div>
+                <span class="font-mono text-amber-400 block text-[10px] uppercase font-semibold">Physics in 1 Sentence:</span>
+                <p class="text-gray-300">Next-gen clean hydrogen aero-combustion runs $300\text{ K}$ hotter than kerosene, causing ceramic matrix composite (CMC) liners to delaminate from unseen moisture/hydrogen flux.</p>
+              </div>
+              <div>
+                <span class="font-mono text-gray-500 block text-[10px] uppercase font-semibold">Why Others Missed This (Plain English):</span>
+                <p class="text-gray-400">Airlines conduct borescopic visual inspections every 500 flight cycles; NukPore provides continuous in-flight impedance monitoring of combustor liner integrity.</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex justify-between font-mono text-[11px]">
+            <span class="text-gray-500">ARR Yield</span>
+            <span class="text-amber-300 font-bold">$69.6M / yr</span>
+          </div>
+        </div>
+
+        <!-- Deep Dive 4: Industrial Ammonia & Steel -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="p-1.5 rounded-lg bg-rose-950 border border-rose-800 text-rose-400">
+                <i data-lucide="factory" class="w-4 h-4"></i>
+              </div>
+              <h4 class="text-sm font-bold text-white">4. Green Steel DRI Reformers</h4>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div>
+                <span class="font-mono text-rose-400 block text-[10px] uppercase font-semibold">Physics in 1 Sentence:</span>
+                <p class="text-gray-300">Hydrogen-fired reduction furnaces generate severe thermal gradient stresses that crack refractory matrix tubes at $1200^\circ\text{C}$.</p>
+              </div>
+              <div>
+                <span class="font-mono text-gray-500 block text-[10px] uppercase font-semibold">Why Others Missed This (Plain English):</span>
+                <p class="text-gray-400">Plant managers wait for external thermal cameras to catch glow through cracked insulation, turning a $5k sensor warning into an emergency $2.8M furnace shutdown.</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex justify-between font-mono text-[11px]">
+            <span class="text-gray-500">ARR Yield</span>
+            <span class="text-rose-300 font-bold">$36.8M / yr</span>
+          </div>
+        </div>
+
+        <!-- Deep Dive 5: Semiconductor EUV Lithography -->
+        <div class="bg-space-900/60 border border-gray-800 rounded-2xl p-5 flex flex-col justify-between backdrop-blur">
+          <div>
+            <div class="flex items-center gap-2 mb-3">
+              <div class="p-1.5 rounded-lg bg-emerald-950 border border-emerald-800 text-emerald-400">
+                <i data-lucide="sparkles" class="w-4 h-4"></i>
+              </div>
+              <h4 class="text-sm font-bold text-white">5. Semiconductor EUV Lithography</h4>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div>
+                <span class="font-mono text-emerald-400 block text-[10px] uppercase font-semibold">Physics in 1 Sentence:</span>
+                <p class="text-gray-300">Sub-nanometer EUV scanners blast molten tin droplets in a high-flow pure hydrogen buffer atmosphere, where debris shield erosion changes eddy pickoff response.</p>
+              </div>
+              <div>
+                <span class="font-mono text-gray-500 block text-[10px] uppercase font-semibold">Why Others Missed This (Plain English):</span>
+                <p class="text-gray-400">Fab operators swallow $180,000/hr downtime during sacrificial collector mirror replacement because they cannot measure localized hydrogen flow shield wear in real-time.</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex justify-between font-mono text-[11px]">
+            <span class="text-gray-500">ARR Yield</span>
+            <span class="text-emerald-300 font-bold">$29.9M / yr</span>
+          </div>
+        </div>
+
+        <!-- Direct Contact and Partnership Box -->
+        <div class="bg-gradient-to-br from-space-900 to-space-950 border border-cyan-700/60 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <span class="text-[10px] font-mono text-cyan-400 uppercase tracking-widest block mb-1">Civil Software Licensing</span>
+            <h4 class="text-sm font-bold text-white mb-2">Partner with NukPore Consortium</h4>
+            <p class="text-xs text-gray-300 leading-relaxed mb-4">
+              NASA SBIR Phase I algorithms, sensor IP, and software observer routines are available for non-defense commercial OEM license and co-development.
+            </p>
+            <div class="bg-space-950 p-3 rounded-xl border border-gray-800 text-xs font-mono space-y-1">
+              <div class="text-gray-400">Engineering Inquiry:</div>
+              <a href="mailto:support@rfwavecode.com" class="text-cyan-400 hover:text-cyan-300 font-semibold block transition underline">
+                support@rfwavecode.com
+              </a>
+              <div class="text-[10px] text-gray-500 pt-1">Response turnaround within 1 business day</div>
+            </div>
+          </div>
+          <div class="mt-4 pt-3 border-t border-gray-850 flex items-center gap-2 text-xs text-gray-400">
+            <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
+            <span>Export-Compliant Dual-Use Technology</span>
+          </div>
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-gray-800 bg-space-950 px-4 py-4 text-center font-mono text-xs text-gray-500">
+    <div class="max-w-7xl mx-auto flex flex-wrap justify-between items-center gap-2">
+      <div>
+        NukPore &copy; 2026 | NASA SBIR / STTR Topic T12.04 In-Pile Instrumentation | UCF Research Partner
+      </div>
+      <div class="flex items-center gap-4 text-gray-400">
+        <span>TRL 3 $\to$ TRL 6 Transition</span>
+        <a href="mailto:support@rfwavecode.com" class="text-cyan-400 hover:underline">support@rfwavecode.com</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ========================================================================= -->
+  <!-- JAVASCRIPT LOGIC: SIMULATION, CHARTS, AND OBSERVER -->
+  <!-- ========================================================================= -->
+  <script>
+    // --- 1. Tab Switching Engine ---
+    const tabMapping = {
+      'sim': { viewId: 'viewSim', btnId: 'tabBtnSim' },
+      'physics': { viewId: 'viewPhysics', btnId: 'tabBtnPhysics' },
+      'proposal': { viewId: 'viewProposal', btnId: 'tabBtnProposal' },
+      'arr': { viewId: 'viewARR', btnId: 'tabBtnARR' }
+    };
+
+    function switchTab(selectedKey) {
+      Object.keys(tabMapping).forEach(key => {
+        const item = tabMapping[key];
+        const viewEl = document.getElementById(item.viewId);
+        const btnEl = document.getElementById(item.btnId);
+
+        if (key === selectedKey) {
+          viewEl.classList.remove('hidden');
+          btnEl.className = 'px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition text-cyan-400 bg-cyan-950/60 border border-cyan-800/80 shadow';
+        } else {
+          viewEl.classList.add('hidden');
+          btnEl.className = 'px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition text-gray-400 hover:text-gray-200';
+        }
+      });
+
+      // Retrigger MathJax typeset immediately
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise();
+      }
+
+      // If returning to sim, resize canvas and charts
+      if (selectedKey === 'sim') {
+        setTimeout(() => {
+          resizeCanvas();
+          if (phaseChart) phaseChart.resize();
+          if (chartL) chartL.resize();
+          if (chartRho) chartRho.resize();
+        }, 60);
+      }
+    }
+
+    // --- 2. Simulation State & Dynamic Parameters ---
+    const simState = {
+      T: 1050,               // Kelvin
+      P_H2: 4.20,            // MPa
+      power: 480,            // MWt
+      
+      // Dynamic internal states
+      stoich: 1.88,          // ZrH_x, baseline 1.92
+      porosity: 0.82,        // Matrix crack volume %
+      L: 24.78,              // microHenries (Nominal baseline: 24.80)
+      L_nominal: 24.80,      // Baseline at 1050 K
+      deltaRho: -0.02,       // Reactivity offset $
+      
+      // Anomaly injection flags
+      faultDesorption: false,
+      faultCracking: false,
+      autonomousRecoveryActive: false,
+      
+      // History arrays for charts
+      timeTick: 0,
+      phaseTrajectory: [],   // Array of {x: T, y: L}
+      historyL: [],
+      historyRho: [],
+      historyLabels: []
+    };
+
+    // --- 3. Canvas Cross-Section Renderer ---
+    const canvas = document.getElementById('coreCanvas');
+    const ctx = canvas.getContext('2d');
+    let animationFrameId = null;
+
+    // Micro-particles simulating hydrogen desorption efflux
+    const h2Particles = [];
+    for (let i = 0; i < 45; i++) {
+      h2Particles.push({
+        angle: Math.random() * Math.PI * 2,
+        r: 30 + Math.random() * 85,
+        speed: 0.6 + Math.random() * 1.4,
+        size: 1.2 + Math.random() * 1.8,
+        alpha: Math.random()
+      });
+    }
+
+    function resizeCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const w = rect.width || 600;
+      const h = rect.height || 320;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      ctx.resetTransform ? ctx.resetTransform() : ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+
+    function renderCanvas() {
+      const rect = canvas.getBoundingClientRect();
+      const w = rect.width || 600;
+      const h = rect.height || 320;
+      const cx = w / 2;
+      const cy = h / 2;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Background grid
+      ctx.strokeStyle = '#0e172a';
+      ctx.lineWidth = 1;
+      const step = 28;
+      for (let x = 0; x < w; x += step) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
+      }
+      for (let y = 0; y < h; y += step) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+      }
+
+      // Outer hexagonal graphite core matrix
+      const hexR = Math.min(w, h) * 0.42;
+      ctx.save();
+      ctx.translate(cx, cy);
+
+      // Draw Hexagonal block
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i - Math.PI / 6;
+        const hx = hexR * Math.cos(a);
+        const hy = hexR * Math.sin(a);
+        if (i === 0) ctx.moveTo(hx, hy);
+        else ctx.lineTo(hx, hy);
+      }
+      ctx.closePath();
+      ctx.fillStyle = '#090f1d';
+      ctx.fill();
+      ctx.strokeStyle = simState.faultCracking ? '#f59e0b' : '#1e293b';
+      ctx.lineWidth = simState.faultCracking ? 2.5 : 1.5;
+      ctx.stroke();
+
+      // Micro-cracking lines in graphite if fault active
+      if (simState.porosity > 2.0 || simState.faultCracking) {
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.7)';
+        ctx.lineWidth = 1.2;
+        for (let k = 0; k < 8; k++) {
+          const ang = k * (Math.PI / 4) + 0.2;
+          ctx.beginPath();
+          ctx.moveTo(35 * Math.cos(ang), 35 * Math.sin(ang));
+          ctx.lineTo((hexR * 0.85) * Math.cos(ang + 0.1), (hexR * 0.85) * Math.sin(ang + 0.1));
+          ctx.stroke();
+        }
+      }
+
+      // Embedded Eddy-Current Pickoff Coils (Amber circles)
+      const coilCount = 6;
+      const coilRadius = hexR * 0.72;
+      for (let c = 0; c < coilCount; c++) {
+        const ca = (Math.PI / 3) * c;
+        const ccx = coilRadius * Math.cos(ca);
+        const ccy = coilRadius * Math.sin(ca);
+
+        // Pulsing eddy field ring
+        const pulse = Math.sin(Date.now() * 0.006 + c) * 2;
+        ctx.beginPath();
+        ctx.arc(ccx, ccy, 14 + pulse, 0, Math.PI * 2);
+        ctx.strokeStyle = simState.faultDesorption ? 'rgba(239, 68, 68, 0.5)' : 'rgba(245, 158, 11, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(ccx, ccy, 9, 0, Math.PI * 2);
+        ctx.fillStyle = '#1c1917';
+        ctx.fill();
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Label on coil
+        ctx.fillStyle = '#fef08a';
+        ctx.font = '8px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`L${c+1}`, ccx, ccy);
+      }
+
+      // Central Zirconium Hydride (ZrHx) Moderator Rod
+      const modRadius = 42;
+      const tempNormalized = Math.min(Math.max((simState.T - 600) / 900, 0), 1);
+      
+      // Dynamic core glow based on temperature & hydrogen desorption
+      const coreGradient = ctx.createRadialGradient(0, 0, 5, 0, 0, modRadius + 15);
+      if (simState.faultDesorption || simState.L < 23.8) {
+        coreGradient.addColorStop(0, '#f87171');
+        coreGradient.addColorStop(0.6, '#b91c1c');
+        coreGradient.addColorStop(1, 'rgba(185, 28, 28, 0.0)');
+      } else {
+        coreGradient.addColorStop(0, '#67e8f9');
+        coreGradient.addColorStop(0.7, '#0891b2');
+        coreGradient.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+      }
+
+      ctx.beginPath();
+      ctx.arc(0, 0, modRadius + 12, 0, Math.PI * 2);
+      ctx.fillStyle = coreGradient;
+      ctx.fill();
+
+      // Main moderator cylinder
+      ctx.beginPath();
+      ctx.arc(0, 0, modRadius, 0, Math.PI * 2);
+      ctx.fillStyle = '#082f49';
+      ctx.fill();
+      ctx.strokeStyle = simState.faultDesorption ? '#ef4444' : '#22d3ee';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      // Inner Cladding boundary
+      ctx.beginPath();
+      ctx.arc(0, 0, modRadius * 0.75, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Text in center of moderator rod
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 11px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`ZrH${simState.stoich.toFixed(2)}`, 0, -4);
+      ctx.font = '9px monospace';
+      ctx.fillStyle = simState.faultDesorption ? '#fca5a5' : '#7dd3fc';
+      ctx.fillText(`${Math.round(simState.T)} K`, 0, 10);
+
+      // Animated Hydrogen Desorption Efflux Particles
+      h2Particles.forEach(p => {
+        p.r += p.speed * (simState.faultDesorption ? 2.2 : 0.8);
+        if (p.r > hexR * 0.95) {
+          p.r = modRadius + 2;
+          p.angle = Math.random() * Math.PI * 2;
+        }
+
+        const px = p.r * Math.cos(p.angle);
+        const py = p.r * Math.sin(p.angle);
+
+        ctx.beginPath();
+        ctx.arc(px, py, p.size, 0, Math.PI * 2);
+        if (simState.faultDesorption) {
+          ctx.fillStyle = `rgba(239, 68, 68, ${0.4 + 0.6 * p.alpha})`;
+        } else {
+          ctx.fillStyle = `rgba(34, 211, 238, ${0.25 + 0.4 * p.alpha})`;
+        }
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    function simAnimationLoop() {
+      renderCanvas();
+      animationFrameId = requestAnimationFrame(simAnimationLoop);
+    }
+
+    // --- 4. Chart.js Configurations ---
+
+    // 4A. Phase-Space (T, L) Chart
+    const ctxPhase = document.getElementById('phaseSpaceChart').getContext('2d');
+
+    // Generate Nominal Baseline corridor (T: 600 to 1500 K)
+    const nominalCurveData = [];
+    const hazardThresholdData = [];
+    for (let temp = 600; temp <= 1500; temp += 50) {
+      // Nominal L decreases gently with reversible thermal expansion
+      const L_nom = 25.10 - 0.00028 * (temp - 600);
+      nominalCurveData.push({ x: temp, y: Number(L_nom.toFixed(3)) });
+
+      // Critical safety hazard boundary (loss of ZrH moderation threshold)
+      const L_crit = L_nom - 0.70;
+      hazardThresholdData.push({ x: temp, y: Number(L_crit.toFixed(3)) });
+    }
+
+    const phaseChart = new Chart(ctxPhase, {
+      type: 'scatter',
+      data: {
+        datasets: [
+          {
+            label: 'Nominal Reversible Corridor',
+            data: nominalCurveData,
+            showLine: true,
+            borderColor: '#06b6d4',
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 0,
+            borderDash: [4, 4]
+          },
+          {
+            label: 'Meltdown Hazard Boundary (Lcrit)',
+            data: hazardThresholdData,
+            showLine: true,
+            borderColor: '#ef4444',
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            fill: 'start',
+            borderWidth: 2,
+            pointRadius: 0,
+            borderDash: [6, 4]
+          },
+          {
+            label: 'State Trajectory',
+            data: [],
+            showLine: true,
+            borderColor: '#8b5cf6',
+            backgroundColor: 'transparent',
+            borderWidth: 1.5,
+            pointRadius: 1,
+            pointHoverRadius: 3
+          },
+          {
+            label: 'Live Operating Point (T, L)',
+            data: [{ x: 1050, y: 24.78 }],
+            borderColor: '#f59e0b',
+            backgroundColor: '#fbbf24',
+            pointRadius: 6,
+            pointHoverRadius: 8
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 },
+        scales: {
+          x: {
+            type: 'linear',
+            position: 'bottom',
+            min: 600,
+            max: 1500,
+            title: {
+              display: true,
+              text: 'Core Moderator Temperature T (K)',
+              color: '#94a3b8',
+              font: { family: 'JetBrains Mono', size: 10 }
+            },
+            grid: { color: '#1e293b' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+          },
+          y: {
+            min: 22.8,
+            max: 25.4,
+            title: {
+              display: true,
+              text: 'Eddy Coil Inductance L (μH)',
+              color: '#94a3b8',
+              font: { family: 'JetBrains Mono', size: 10 }
+            },
+            grid: { color: '#1e293b' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+          }
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top',
+            labels: {
+              color: '#94a3b8',
+              font: { family: 'JetBrains Mono', size: 9 },
+              boxWidth: 10,
+              padding: 6
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(ctx) {
+                return `(T: ${ctx.parsed.x} K, L: ${ctx.parsed.y} μH)`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // 4B. Time Series Chart L(t)
+    const ctxL = document.getElementById('timeSeriesChartL').getContext('2d');
+    const chartL = new Chart(ctxL, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [{
+          label: 'L(t) [μH]',
+          data: [],
+          borderColor: '#06b6d4',
+          backgroundColor: 'rgba(6, 182, 212, 0.1)',
+          fill: true,
+          borderWidth: 2,
+          pointRadius: 0,
+          tension: 0.2
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 },
+        scales: {
+          x: {
+            display: false
+          },
+          y: {
+            min: 23.0,
+            max: 25.2,
+            grid: { color: '#1e293b' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+          }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+
+    // 4C. Time Series Chart Rho(t)
+    const ctxRho = document.getElementById('timeSeriesChartRho').getContext('2d');
+    const chartRho = new Chart(ctxRho, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Delta Rho [$]',
+            data: [],
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.2
+          },
+          {
+            label: 'Trip Limit (-0.85 $)',
+            data: [],
+            borderColor: '#ef4444',
+            borderWidth: 1.5,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            fill: false
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 0 },
+        scales: {
+          x: { display: false },
+          y: {
+            min: -1.2,
+            max: 0.2,
+            grid: { color: '#1e293b' },
+            ticks: { color: '#64748b', font: { family: 'JetBrains Mono', size: 9 } }
+          }
+        },
+        plugins: {
+          legend: { display: false }
+        }
+      }
+    });
+
+    // --- 5. Real-Time Physics Evolution & Closed Loop Step ---
+    function updatePhysicsEngine() {
+      simState.timeTick++;
+
+      // Physical Nominal Inductance at current T
+      const L_reversible_nominal = 25.10 - 0.00028 * (simState.T - 600);
+      simState.L_nominal = L_reversible_nominal;
+
+      // Handle Fault Injections
+      if (simState.faultDesorption) {
+        // Stoichiometry degrades towards ZrH_1.4
+        simState.stoich = Math.max(1.42, simState.stoich - 0.004);
+        // Inductance drops steeply due to H2 loss
+        simState.L = Math.max(23.10, simState.L - 0.018);
+      } else if (simState.autonomousRecoveryActive) {
+        // Recovery restores stoichiometry toward 1.89 via cool-down / pressure trim
+        simState.stoich = Math.min(1.89, simState.stoich + 0.005);
+        simState.L = Math.min(L_reversible_nominal, simState.L + 0.022);
+        simState.porosity = Math.max(0.75, simState.porosity - 0.03);
+      } else {
+        // Passive relaxation toward equilibrium for given T & P
+        const equilibriumStoich = Math.min(1.92, 2.05 - 0.00018 * simState.T + 0.015 * (simState.P_H2 - 4.0));
+        simState.stoich += (equilibriumStoich - simState.stoich) * 0.05;
+        
+        const targetL = L_reversible_nominal - (1.92 - simState.stoich) * 2.2 - (simState.porosity * 0.08);
+        simState.L += (targetL - simState.L) * 0.15;
+      }
+
+      // Micro-crack evolution if thermal power and cracking fault is triggered
+      if (simState.faultCracking) {
+        simState.porosity = Math.min(6.5, simState.porosity + 0.06);
+        simState.L = Math.max(22.9, simState.L - 0.012);
+      } else if (!simState.autonomousRecoveryActive) {
+        simState.porosity = Math.max(0.70, simState.porosity + (simState.T > 1300 ? 0.01 : -0.005));
+      }
+
+      // Compute Reactivity Penalty Delta Rho ($)
+      // Loss of H moderation = negative reactivity worth: alpha_H * (1 - x / 1.92)
+      simState.deltaRho = -3.42 * (1.0 - (simState.stoich / 1.92)) - (simState.porosity * 0.04);
+
+      // Hazard Margin ($L - L_{crit}$)
+      const L_crit = L_reversible_nominal - 0.70;
+      const margin = simState.L - L_crit;
+
+      // Update Phase Trajectory History (max 25 historical points)
+      simState.phaseTrajectory.push({ x: Number(simState.T), y: Number(simState.L.toFixed(3)) });
+      if (simState.phaseTrajectory.length > 25) {
+        simState.phaseTrajectory.shift();
+      }
+
+      // Time series buffers (max 40 ticks)
+      simState.historyLabels.push(simState.timeTick);
+      simState.historyL.push(Number(simState.L.toFixed(3)));
+      simState.historyRho.push(Number(simState.deltaRho.toFixed(3)));
+      if (simState.historyLabels.length > 40) {
+        simState.historyLabels.shift();
+        simState.historyL.shift();
+        simState.historyRho.shift();
+      }
+
+      // Update DOM Indicators
+      document.getElementById('stoichiometryVal').innerHTML = `ZrH<sub>${simState.stoich.toFixed(2)}</sub>`;
+      document.getElementById('porosityVal').textContent = `${simState.porosity.toFixed(2)} %`;
+      
+      const deltaLPct = ((simState.L - simState.L_nominal) / simState.L_nominal) * 100;
+      document.getElementById('deltaLVal').textContent = `${deltaLPct >= 0 ? '+' : ''}${deltaLPct.toFixed(2)} %`;
+      
+      document.getElementById('headerDeltaRho').textContent = `${simState.deltaRho.toFixed(2)} $`;
+      document.getElementById('currentLDisplay').textContent = `${simState.L.toFixed(2)} μH`;
+      document.getElementById('currentRhoDisplay').textContent = `${simState.deltaRho.toFixed(2)} $`;
+      document.getElementById('phaseCoordTxt').textContent = `T = ${Math.round(simState.T)} K, L = ${simState.L.toFixed(2)} μH`;
+      document.getElementById('hazardMarginTxt').textContent = `${margin >= 0 ? '+' : ''}${margin.toFixed(2)} μH ${margin > 0 ? 'Safe' : 'CRITICAL'}`;
+      document.getElementById('hazardMarginTxt').className = margin > 0.3 ? 'text-emerald-400 font-semibold' : (margin > 0 ? 'text-amber-400 font-semibold' : 'text-rose-400 font-bold animate-pulse');
+
+      // State Badges & Alarms
+      const banner = document.getElementById('simAlarmBanner');
+      const canvasHealth = document.getElementById('canvasHealthTag');
+      const headerStatus = document.getElementById('headerCoreStatusBadge');
+      const modBadge = document.getElementById('modStateBadge');
+
+      if (margin <= 0 || simState.deltaRho <= -0.85) {
+        banner.classList.remove('hidden');
+        canvasHealth.className = 'px-2 py-0.5 rounded bg-rose-950 border border-rose-800 text-rose-400 font-semibold animate-pulse';
+        canvasHealth.textContent = 'MELTDOWN RISK';
+        headerStatus.className = 'text-rose-400 font-semibold flex items-center gap-1';
+        headerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping"></span> LOSS-OF-MODERATION`;
+        modBadge.className = 'text-rose-400 font-bold text-sm';
+        modBadge.textContent = 'Degassing / Collapse';
+      } else if (margin < 0.35 || simState.faultDesorption || simState.faultCracking) {
+        banner.classList.remove('hidden');
+        canvasHealth.className = 'px-2 py-0.5 rounded bg-amber-950 border border-amber-800 text-amber-400 font-semibold';
+        canvasHealth.textContent = 'ANOMALY LEAK';
+        headerStatus.className = 'text-amber-400 font-semibold flex items-center gap-1';
+        headerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span> RETENTION DEGRADING`;
+        modBadge.className = 'text-amber-400 font-bold text-sm';
+        modBadge.textContent = 'Phase Boundary Shift';
+      } else {
+        banner.classList.add('hidden');
+        canvasHealth.className = 'px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800 text-emerald-400 font-semibold';
+        canvasHealth.textContent = 'LATTICE INTACT';
+        headerStatus.className = 'text-emerald-400 font-semibold flex items-center gap-1';
+        headerStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> NOMINAL RETENTION`;
+        modBadge.className = 'text-emerald-400 font-bold text-sm';
+        modBadge.textContent = 'δ-phase Intact';
+      }
+
+      // Check if autonomous recovery can auto-disengage
+      if (simState.autonomousRecoveryActive && simState.stoich >= 1.88 && simState.L >= (L_reversible_nominal - 0.08)) {
+        simState.autonomousRecoveryActive = false;
+        simState.faultDesorption = false;
+        simState.faultCracking = false;
+      }
+
+      // Update Chart.js datasets
+      phaseChart.data.datasets[2].data = [...simState.phaseTrajectory];
+      phaseChart.data.datasets[3].data = [{ x: Number(simState.T), y: Number(simState.L.toFixed(3)) }];
+      phaseChart.update('none');
+
+      chartL.data.labels = simState.historyLabels;
+      chartL.data.datasets[0].data = simState.historyL;
+      chartL.update('none');
+
+      chartRho.data.labels = simState.historyLabels;
+      chartRho.data.datasets[0].data = simState.historyRho;
+      chartRho.data.datasets[1].data = simState.historyLabels.map(() => -0.85);
+      chartRho.update('none');
+    }
+
+    // --- 6. Fault Injections & Closed-Loop Autonomous Mitigation ---
+    function injectFault(type) {
+      if (type === 'hydrogenLoss') {
+        simState.faultDesorption = true;
+        simState.autonomousRecoveryActive = false;
+      } else if (type === 'graphiteCracking') {
+        simState.faultCracking = true;
+        simState.autonomousRecoveryActive = false;
+      }
+    }
+
+    function triggerAutonomousRecovery() {
+      simState.autonomousRecoveryActive = true;
+      simState.faultDesorption = false;
+      simState.faultCracking = false;
+
+      // Closed-loop observer action: Throttles thermal power, trims propellant pressure to 5.2 MPa, cools T to 980 K
+      simState.T = Math.max(920, simState.T - 80);
+      simState.P_H2 = 5.20;
+      simState.power = 420;
+
+      // Update slider positions to reflect automated trim
+      document.getElementById('sliderTemp').value = simState.T;
+      document.getElementById('sliderTempDisplay').textContent = `${Math.round(simState.T)} K`;
+      
+      document.getElementById('sliderPress').value = simState.P_H2;
+      document.getElementById('sliderPressDisplay').textContent = `${simState.P_H2.toFixed(2)} MPa`;
+
+      document.getElementById('sliderPower').value = simState.power;
+      document.getElementById('sliderPowerDisplay').textContent = `${simState.power} MWt`;
+    }
+
+    // --- 7. Slider Event Listeners ---
+    document.getElementById('sliderTemp').addEventListener('input', (e) => {
+      simState.T = parseFloat(e.target.value);
+      document.getElementById('sliderTempDisplay').textContent = `${Math.round(simState.T)} K`;
+    });
+
+    document.getElementById('sliderPress').addEventListener('input', (e) => {
+      simState.P_H2 = parseFloat(e.target.value);
+      document.getElementById('sliderPressDisplay').textContent = `${simState.P_H2.toFixed(2)} MPa`;
+    });
+
+    document.getElementById('sliderPower').addEventListener('input', (e) => {
+      simState.power = parseFloat(e.target.value);
+      document.getElementById('sliderPowerDisplay').textContent = `${simState.power} MWt`;
+    });
+
+    // --- 8. Initialization Lifecycle ---
+    window.onload = function() {
+      // Render Lucide icons
+      lucide.createIcons();
+
+      // Setup initial canvas dimensions and launch loops
+      resizeCanvas();
+      simAnimationLoop();
+      
+      // Steady physics tick (100 ms)
+      setInterval(updatePhysicsEngine, 100);
+
+      // Initial MathJax render
+      if (window.MathJax && window.MathJax.typesetPromise) {
+        window.MathJax.typesetPromise();
+      }
+    };
+  </script>
+</body>
+</html>
